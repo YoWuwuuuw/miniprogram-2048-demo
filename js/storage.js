@@ -116,3 +116,22 @@ export function getStatistics() {
     return { totalGames: 0, totalScore: 0, avgScore: 0, bestScore: 0, totalMoves: 0 }
   }
 }
+
+// 保存用户昵称
+export function saveNickname(nickname) {
+  try {
+    wx.setStorageSync(STORAGE_KEYS.USER_NICKNAME, nickname)
+  } catch (e) {
+    console.warn('saveNickname failed:', e)
+  }
+}
+
+// 获取用户昵称
+export function getNickname() {
+  try {
+    return wx.getStorageSync(STORAGE_KEYS.USER_NICKNAME) || ''
+  } catch (e) {
+    console.warn('getNickname failed:', e)
+    return ''
+  }
+}

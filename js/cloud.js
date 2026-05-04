@@ -6,6 +6,7 @@ import { CLOUD_ENV } from '../config.local.js'
 
 let _db = null
 let _scores = null
+let _users = null
 
 // 排行榜缓存
 const RANK_CACHE_TTL = 60000 // 60 秒
@@ -21,6 +22,11 @@ function getScores() {
   return _scores
 }
 
+function getUsers() {
+  if (!_users) _users = getDb().collection('users')
+  return _users
+}
+
 // 初始化云开发
 export function initCloud() {
   wx.cloud.init({
@@ -29,38 +35,113 @@ export function initCloud() {
   })
 }
 
-// 上传分数（只在更高分时更新）
-export async function uploadScore(score, maxTile, moveCount) {
+// 保存用户信息（openid + nickname）到云端
+export async function saveUserInfo(nickname) {
   try {
-    const scores = getScores()
-    const db = getDb()
-    const { data } = await scores
+    const users = getUsers()
+    const { data } = await users
       .where({ _openid: '{openid}' })
       .get()
 
     if (data.length > 0) {
-      const existing = data[0]
-      if (score > existing.score) {
-        await scores.doc(existing._id).update({
-          data: {
-            score,
-            maxTile,
-            moveCount,
-            createdAt: db.serverDate()
-          }
-        })
-      }
+      await users.doc(data[0]._id).update({
+        data: { nickname }
+      })
     } else {
-      await scores.add({
+      await users.add({
         data: {
-          score,
-          maxTile,
-          moveCount,
-          nickname: '匿名玩家',
-          createdAt: db.serverDate()
+          nickname,
+          createdAt: getDb().serverDate()
         }
       })
     }
+  } catch (e) {
+    console.warn('saveUserInfo failed:', e)
+  }
+}
+
+// 获取当前用户在云端的昵称
+export async function getUserNickname() {
+  try {
+    const users = getUsers()
+    const { data } = await users
+      .where({ _openid: '{openid}' })
+      .get()
+
+    if (data.length > 0) {
+      return data[0].nickname || ''
+    }
+    return ''
+  } catch (e) {
+    console.warn('getUserNickname failed:', e)
+    return ''
+  }
+}
+
+// 上传分数（始终上传，100 名限制，同一用户仅保留最高分记录）
+export async function uploadScore(score, maxTile, moveCount) {
+  try {
+    // 未登录用户不上传分数
+    const { getNickname } = await import('./storage.js')
+    const nickname = getNickname()
+    if (!nickname || nickname === '匿名用户') return
+
+    const scores = getScores()
+    const db = getDb()
+
+    // 查询当前用户已有记录
+    const { data: existingRecords } = await scores
+      .where({ _openid: '{openid}' })
+      .get()
+
+    // 如果用户已有记录且新分数不更高，跳过
+    if (existingRecords.length > 0 && score <= existingRecords[0].score) {
+      return
+    }
+
+    // 查询第 100 名的分数，判断是否可入榜
+    const { data: top100 } = await scores
+      .orderBy('score', 'desc')
+      .limit(100)
+      .get()
+
+    // 排行榜已满且新分数不够入榜
+    if (top100.length >= 100 && score <= top100[top100.length - 1].score) {
+      return
+    }
+
+    // nickname already retrieved above
+
+    // 删除用户旧记录
+    for (const record of existingRecords) {
+      await scores.doc(record._id).remove()
+    }
+
+    // 添加新记录
+    await scores.add({
+      data: {
+        score,
+        maxTile,
+        moveCount,
+        nickname,
+        createdAt: db.serverDate()
+      }
+    })
+
+    // 清理排名 > 100 的记录
+    const { data: allRecords } = await scores
+      .orderBy('score', 'desc')
+      .get()
+
+    if (allRecords.length > 100) {
+      const toDelete = allRecords.slice(100)
+      for (const record of toDelete) {
+        await scores.doc(record._id).remove()
+      }
+    }
+
+    // 清除排行榜缓存
+    clearRankListCache()
   } catch (e) {
     console.warn('uploadScore failed:', e)
   }

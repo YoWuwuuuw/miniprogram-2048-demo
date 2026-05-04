@@ -6,10 +6,10 @@ config.local.js
 node_modules/
 
 # Claude Code 工作目录
-.claude/
+# .claude/
 
 # OpenSpec 开发过程文档
-openspec/
+# openspec/
 
 # 日志
 *.log

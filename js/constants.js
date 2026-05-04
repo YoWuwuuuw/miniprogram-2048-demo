@@ -50,7 +50,8 @@ export const STORAGE_KEYS = {
   BEST_SCORE: 'best_score',
   RANK_HISTORY: 'rank_history',
   STATISTICS: 'game_statistics',
-  SETTINGS: 'game_settings'
+  SETTINGS: 'game_settings',
+  USER_NICKNAME: 'user_nickname'
 }
 
 // 滑动阈值（像素）

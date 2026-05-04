@@ -47,7 +47,7 @@ export class RanklistScene {
     this.inputManager.onTouchStart(this._onTouchStart)
     this.inputManager.onScrollEnd(this._onScrollEnd)
 
-    this.rankList = await fetchRankList(50)
+    this.rankList = await fetchRankList(100)
     // 数据不足时补充测试数据
     if (this.rankList.length < 10) {
       this.rankList = seedTestData(20)
@@ -69,7 +69,9 @@ export class RanklistScene {
 
   _onScroll(cumulativeDeltaY) {
     const maxScroll = this._getMaxScroll()
-    const target = this._scrollAtTouchStart + cumulativeDeltaY
+    // 应用阻尼系数，使小幅度滑动更平滑
+    const dampedDelta = cumulativeDeltaY * 0.8
+    const target = this._scrollAtTouchStart + dampedDelta
 
     if (target < 0) {
       // 超出顶部：弹性阻尼
@@ -96,8 +98,9 @@ export class RanklistScene {
   _getMaxScroll() {
     const { screenHeight } = this.layout
     const itemHeight = 52
-    const listTopY = this._getListTopY()
-    const visibleHeight = screenHeight * 0.85 - listTopY - 20
+    const headerHeight = 28
+    const listStartY = this._getListTopY() + headerHeight
+    const visibleHeight = screenHeight * 0.85 - listStartY - 20
     return Math.max(0, this.rankList.length * itemHeight - visibleHeight)
   }
 
@@ -155,7 +158,7 @@ export class RanklistScene {
 
     const { boardX, boardWidth, screenWidth, screenHeight } = this.layout
 
-    // 标题（安全区域，上移避免与表头重叠）
+    // 标题（安全区域）
     const titleY = screenHeight * 0.06
     ctx.fillStyle = COLORS.headerText
     ctx.font = FONTS.title
@@ -163,38 +166,10 @@ export class RanklistScene {
     ctx.textBaseline = 'top'
     ctx.fillText('排行榜', screenWidth / 2, titleY)
 
-    // 表头（优化布局，与数据列对齐）
+    // 列表区域布局
     const listTopY = this._getListTopY()
-    const headerY = listTopY
-
-    ctx.fillStyle = '#777777' // 加深表头颜色
-    ctx.font = 'bold 14px Arial' // 增大表头字体
-    ctx.textBaseline = 'middle'
-
-    // 列定义（与drawCloudRankItem保持一致）
-    const rankColW = boardWidth * 0.12
-    const nameColW = boardWidth * 0.32
-    const scoreColW = boardWidth * 0.28
-    const maxTileColW = boardWidth * 0.28
-
-    ctx.textAlign = 'center'
-    ctx.fillText('排名', boardX + rankColW / 2, headerY)
-    ctx.textAlign = 'left'
-    ctx.fillText('昵称', boardX + rankColW + 12, headerY)
-    ctx.textAlign = 'right'
-    ctx.fillText('分数', boardX + rankColW + nameColW + scoreColW - 12, headerY)
-    ctx.fillText('方块', boardX + boardWidth - 12, headerY)
-
-    // 分隔线（增加间距）
-    ctx.strokeStyle = '#ddd'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(boardX, headerY + 16)
-    ctx.lineTo(boardX + boardWidth, headerY + 16)
-    ctx.stroke()
-
-    // 列表区域（增加间距）
-    const listStartY = headerY + 28
+    const headerHeight = 28 // 表头+分隔线总高度
+    const listStartY = listTopY + headerHeight
     const itemHeight = 52 // 48px 卡片 + 4px 间距
     const visibleHeight = screenHeight * 0.85 - listStartY - 20
 
@@ -218,10 +193,10 @@ export class RanklistScene {
         Math.ceil((this.scrollOffset + visibleHeight) / itemHeight)
       )
 
-      // 裁剪区域（上下各多留 itemHeight 以容纳弹性越界和部分可见行）
+      // 裁剪区域：仅列表项区域参与滚动，表头固定在上方
       ctx.save()
       ctx.beginPath()
-      ctx.rect(boardX - 1, listStartY - itemHeight, boardWidth + 2, visibleHeight + itemHeight * 2)
+      ctx.rect(boardX - 1, listStartY, boardWidth + 2, visibleHeight)
       ctx.clip()
 
       for (let i = startIdx; i < endIdx; i++) {
@@ -231,6 +206,36 @@ export class RanklistScene {
 
       ctx.restore()
     }
+
+    // 固定表头（在裁剪区域外绘制，始终可见）
+    const headerY = listTopY
+    const rankColW = boardWidth * 0.12
+    const nameColW = boardWidth * 0.32
+    const scoreColW = boardWidth * 0.28
+
+    // 表头背景（遮盖可能溢出的列表项）
+    ctx.fillStyle = COLORS.pageBackground
+    ctx.fillRect(boardX - 1, listTopY - 2, boardWidth + 2, headerHeight + 4)
+
+    ctx.fillStyle = '#777777'
+    ctx.font = 'bold 14px Arial'
+    ctx.textBaseline = 'middle'
+
+    ctx.textAlign = 'center'
+    ctx.fillText('排名', boardX + rankColW / 2, headerY + 6)
+    ctx.textAlign = 'left'
+    ctx.fillText('昵称', boardX + rankColW + 12, headerY + 6)
+    ctx.textAlign = 'right'
+    ctx.fillText('分数', boardX + rankColW + nameColW + scoreColW - 12, headerY + 6)
+    ctx.fillText('方块', boardX + boardWidth - 12, headerY + 6)
+
+    // 分隔线
+    ctx.strokeStyle = '#ddd'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(boardX, headerY + headerHeight)
+    ctx.lineTo(boardX + boardWidth, headerY + headerHeight)
+    ctx.stroke()
 
     // 返回按钮
     this.backBtn.draw(this.renderer)
