@@ -1,0 +1,15 @@
+# 本地敏感配置
+*.local.*
+config.local.js
+
+# 依赖
+node_modules/
+
+# Claude Code 工作目录
+.claude/
+
+# OpenSpec 开发过程文档
+openspec/
+
+# 日志
+*.log
